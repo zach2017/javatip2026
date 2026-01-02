@@ -1,0 +1,172 @@
+package zac.demo.futureapp;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.util.Arrays;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class AsyncDemoRunner implements CommandLineRunner {
+
+    private final HelloService helloService;
+    private final JobTracker jobTracker;
+
+    @Override
+    public void run(String... args) {
+        log.info("========================================");
+        log.info("Starting Async Demo Examples (Job-based, Java 21)");
+        log.info("========================================");
+
+        // Example 1: Simple hello (Runnable) - Platform Thread
+        log.info("\n--- Example 1: Simple Hello (Platform Thread) ---");
+        JobAcceptedResponse helloJob = helloService.startHelloJob();
+        log.info("Started hello job: {} -> {}", helloJob.jobId(), helloJob.statusUrl());
+        awaitAndLog(helloJob.jobId());
+
+        // Example 2: Simple hello (Runnable) - Virtual Thread (Java 21)
+        log.info("\n--- Example 2: Simple Hello (Virtual Thread - Java 21) ---");
+        JobAcceptedResponse helloVirtualJob = helloService.startSayHelloVirtualJob();
+        log.info("Started hello virtual job: {} -> {}", helloVirtualJob.jobId(), helloVirtualJob.statusUrl());
+        awaitAndLog(helloVirtualJob.jobId());
+
+        // Example 3: Greet with name (Supplier)
+        log.info("\n--- Example 3: Greet with Name (Supplier) ---");
+        JobAcceptedResponse greetJob = helloService.startGreetJob("World");
+        log.info("Started greet job: {} -> {}", greetJob.jobId(), greetJob.statusUrl());
+        awaitAndLog(greetJob.jobId());
+
+        // Example 4: Greet with name (Virtual Thread)
+        log.info("\n--- Example 4: Greet with Name (Virtual Thread) ---");
+        JobAcceptedResponse greetVirtualJob = helloService.startGreetVirtualJob("Java 21");
+        log.info("Started greet virtual job: {} -> {}", greetVirtualJob.jobId(), greetVirtualJob.statusUrl());
+        awaitAndLog(greetVirtualJob.jobId());
+
+        // Example 5: Transform name (Function)
+        log.info("\n--- Example 5: Transform Name (Function) ---");
+        JobAcceptedResponse transformJob = helloService.startTransformNameJob("spring");
+        log.info("Started transform job: {} -> {}", transformJob.jobId(), transformJob.statusUrl());
+        awaitAndLog(transformJob.jobId());
+
+        // Example 6: Log message (Consumer)
+        log.info("\n--- Example 6: Log Message (Consumer) ---");
+        JobAcceptedResponse logJob = helloService.startLogMessageJob("Testing async consumer");
+        log.info("Started log job: {} -> {}", logJob.jobId(), logJob.statusUrl());
+        awaitAndLog(logJob.jobId());
+
+        // Example 7: Parallel execution (Platform Threads)
+        log.info("\n--- Example 7: Parallel Execution (Platform Threads) ---");
+        JobAcceptedResponse parallelJob = helloService.startParallelHellosJob();
+        log.info("Started parallel job: {} -> {}", parallelJob.jobId(), parallelJob.statusUrl());
+        JobSnapshot parallelSnap = awaitAndLog(parallelJob.jobId());
+        if (parallelSnap != null && parallelSnap.result() instanceof Object[] arr) {
+            log.info("Parallel results: {}", Arrays.toString(arr));
+        } else if (parallelSnap != null) {
+            log.info("Parallel result: {}", parallelSnap.result());
+        }
+
+        // Example 8: Parallel execution (Virtual Threads)
+        log.info("\n--- Example 8: Parallel Execution (Virtual Threads) ---");
+        JobAcceptedResponse parallelVirtualJob = helloService.startParallelHellosVirtualJob();
+        log.info("Started parallel virtual job: {} -> {}", parallelVirtualJob.jobId(), parallelVirtualJob.statusUrl());
+        JobSnapshot parallelVirtualSnap = awaitAndLog(parallelVirtualJob.jobId());
+        if (parallelVirtualSnap != null && parallelVirtualSnap.result() instanceof Object[] arr) {
+            log.info("Virtual parallel results: {}", Arrays.toString(arr));
+        } else if (parallelVirtualSnap != null) {
+            log.info("Virtual parallel result: {}", parallelVirtualSnap.result());
+        }
+
+        // Example 9: Chained operations
+        log.info("\n--- Example 9: Chained Operations ---");
+        JobAcceptedResponse chainJob = helloService.startChainedHelloJob("  JOHN DOE  ");
+        log.info("Started chain job: {} -> {}", chainJob.jobId(), chainJob.statusUrl());
+        awaitAndLog(chainJob.jobId());
+
+        // Example 10: With timeout
+        log.info("\n--- Example 10: With Timeout ---");
+        JobAcceptedResponse timeoutJob = helloService.startGreetWithTimeoutJob("Timeout Test", 2000);
+        log.info("Started timeout job: {} -> {}", timeoutJob.jobId(), timeoutJob.statusUrl());
+        awaitAndLog(timeoutJob.jobId());
+
+        // Example 11: With fallback (success case)
+        log.info("\n--- Example 11: With Fallback (Success) ---");
+        JobAcceptedResponse fallbackSuccessJob = helloService.startGreetWithFallbackJob("Success", false);
+        log.info("Started fallback success job: {} -> {}", fallbackSuccessJob.jobId(), fallbackSuccessJob.statusUrl());
+        awaitAndLog(fallbackSuccessJob.jobId());
+
+        // Example 12: With fallback (failure case)
+        log.info("\n--- Example 12: With Fallback (Failure) ---");
+        JobAcceptedResponse fallbackFailJob = helloService.startGreetWithFallbackJob("Fail", true);
+        log.info("Started fallback failure job: {} -> {}", fallbackFailJob.jobId(), fallbackFailJob.statusUrl());
+        awaitAndLog(fallbackFailJob.jobId());
+
+        // Example 13: Race (first to complete wins)
+        log.info("\n--- Example 13: Race (First Wins) ---");
+        JobAcceptedResponse raceJob = helloService.startRaceHellosJob();
+        log.info("Started race job: {} -> {}", raceJob.jobId(), raceJob.statusUrl());
+        awaitAndLog(raceJob.jobId());
+
+        log.info("\n========================================");
+        log.info("Async Demo Examples Completed!");
+        log.info("========================================");
+        log.info("REST API available at: http://localhost:8080/api/hello");
+        log.info("");
+        log.info("Available Endpoints (Job-based):");
+        log.info("  POST /api/hello/hello                     - Start 'hello' job (platform threads)");
+        log.info("  POST /api/hello/hello/virtual             - Start 'hello' job (virtual threads)");
+        log.info("  POST /api/hello/greet?name=X              - Start greet job");
+        log.info("  POST /api/hello/greet/virtual?name=X      - Start greet job (virtual threads)");
+        log.info("  POST /api/hello/transform?name=X          - Start transform job");
+        log.info("  POST /api/hello/log                       - Start log message job");
+        log.info("  POST /api/hello/parallel                  - Start parallel job");
+        log.info("  POST /api/hello/parallel/virtual          - Start parallel job (virtual threads)");
+        log.info("  POST /api/hello/chain?name=X              - Start chained job");
+        log.info("  POST /api/hello/timeout?name=X&timeoutMs=1000 - Start timeout job");
+        log.info("  POST /api/hello/fallback?name=X&fail=false    - Start fallback job");
+        log.info("  POST /api/hello/race                      - Start race job");
+        log.info("  GET  /api/hello/jobs/{jobId}              - Get job status/result");
+        log.info("  GET  /api/hello/jobs?limit=50             - List recent jobs");
+    }
+
+    /**
+     * Polls the JobTracker until the job completes or a max wait is reached.
+     */
+    private JobSnapshot awaitAndLog(String jobId) {
+        final long start = System.nanoTime();
+        final long maxWaitNanos = Duration.ofSeconds(15).toNanos();
+        final long pollIntervalMs = 150;
+
+        while (System.nanoTime() - start < maxWaitNanos) {
+            JobSnapshot snap = jobTracker.get(jobId).orElse(null);
+            if (snap == null) {
+                log.warn("Job {} not found yet...", jobId);
+            } else {
+                if (snap.status() == JobStatus.SUCCEEDED) {
+                    log.info("Job {} SUCCEEDED. result={}", jobId, snap.result());
+                    return snap;
+                }
+                if (snap.status() == JobStatus.FAILED) {
+                    log.warn("Job {} FAILED. error={}", jobId, snap.error());
+                    return snap;
+                }
+
+                log.info("Job {} status={}", jobId, snap.status());
+            }
+
+            try {
+                Thread.sleep(pollIntervalMs);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                log.warn("Interrupted while waiting for job {}", jobId);
+                return null;
+            }
+        }
+
+        log.warn("Job {} still not finished after max wait.", jobId);
+        return jobTracker.get(jobId).orElse(null);
+    }
+}
