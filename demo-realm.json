@@ -1,0 +1,150 @@
+{
+  "realm": "demorealm",
+  "enabled": true,
+  "displayName": "Demo Realm",
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+
+  "roles": {
+    "realm": [
+      { "name": "user", "description": "Standard user role" },
+      { "name": "admin", "description": "Admin role" },
+      { "name": "force_otp", "description": "Users with this role must use OTP at login" }
+    ]
+  },
+
+  "groups": [
+    {
+      "name": "admins",
+      "realmRoles": ["admin", "force_otp"]
+    },
+    {
+      "name": "users",
+      "realmRoles": ["user"]
+    }
+  ],
+
+  "users": [
+    {
+      "username": "demo-admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Admin",
+      "email": "demo-admin@example.com",
+      "credentials": [
+        { "type": "password", "value": "AdminPassw0rd!", "temporary": false }
+      ],
+      "groups": ["admins"],
+      "requiredActions": ["CONFIGURE_TOTP"]
+    },
+    {
+      "username": "demo-user",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "User",
+      "email": "demo-user@example.com",
+      "credentials": [
+        { "type": "password", "value": "UserPassw0rd!", "temporary": false }
+      ],
+      "groups": ["users"]
+    }
+  ],
+
+  "requiredActions": [
+    {
+      "alias": "CONFIGURE_TOTP",
+      "name": "Configure OTP",
+      "providerId": "CONFIGURE_TOTP",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 10,
+      "config": {}
+    }
+  ],
+
+  "authenticationFlows": [
+    {
+      "alias": "browser-admin-otp",
+      "description": "Browser flow that requires OTP if user has the force_otp role",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-cookie",
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "identity-provider-redirector",
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticatorFlow": true,
+          "autheticatorFlow": true,
+          "requirement": "REQUIRED",
+          "priority": 30,
+          "flowAlias": "forms-admin-otp"
+        }
+      ]
+    },
+    {
+      "alias": "forms-admin-otp",
+      "description": "Username/password + conditional OTP",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-username-password-form",
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticatorFlow": true,
+          "autheticatorFlow": true,
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "flowAlias": "conditional-otp-subflow"
+        }
+      ]
+    },
+    {
+      "alias": "conditional-otp-subflow",
+      "description": "OTP only when force_otp role applies",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-otp-form",
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false,
+          "authenticatorConfig": "conditional-otp-force-role"
+        }
+      ]
+    }
+  ],
+
+  "authenticatorConfig": [
+    {
+      "alias": "conditional-otp-force-role",
+      "config": {
+        "forceOtpRole": "force_otp"
+      }
+    }
+  ],
+
+  "browserFlow": "browser-admin-otp"
+}
