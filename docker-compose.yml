@@ -1,47 +1,17 @@
 services:
-  postgres:
-    image: postgres:16
-    container_name: kc-postgres
+  db:
+    image: postgres:17
+    container_name: postgres_db
     environment:
-      POSTGRES_DB: keycloak
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: keycloakpass
-    volumes:
-      - kc_pg_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.4.7
-    container_name: keycloak
-    depends_on:
-      postgres:
-        condition: service_healthy
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mydatabase
     ports:
-      - "8080:8080"
-    environment:
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: keycloakpass
-
-      # Bootstrap admin (for the master realm / admin console login)
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin123
-
-      # Dev-friendly HTTP (no TLS) + hostname relaxed for local
-      KC_HTTP_ENABLED: "true"
-      KC_HOSTNAME_STRICT: "false"
-      KC_PROXY_HEADERS: "xforwarded"
-
-      # Optional: reduce noise
-      KC_LOG_LEVEL: INFO
-    command: ["start-dev", "--import-realm"]
+      - "5432:5432"  # This allows host access
     volumes:
-      - ./realm-import:/opt/keycloak/data/import
+      - postgres_data:/var/lib/postgresql/data
+
+ # DATABASE_URL: "postgresql://user:password@db:5432/mydatabase"
 
 volumes:
-  kc_pg_data:
+  postgres_data:
