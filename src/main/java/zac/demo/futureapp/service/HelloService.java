@@ -1,15 +1,15 @@
 package zac.demo.futureapp.service;
 
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import zac.demo.futureapp.types.*;
+
+import org.springframework.stereotype.Service;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import zac.demo.futureapp.types.JobSnapshot;
 
 /**
  * Example service demonstrating async work with "immediate return" job
