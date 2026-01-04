@@ -1,4 +1,4 @@
-package zac.demo.futureapp;
+package zac.demo.futureapp.types;
 
 import java.time.Instant;
 import java.util.UUID;

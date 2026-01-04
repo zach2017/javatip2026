@@ -1,4 +1,4 @@
-package zac.demo.futureapp;
+package zac.demo.futureapp.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;

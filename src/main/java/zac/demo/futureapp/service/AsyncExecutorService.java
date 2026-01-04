@@ -1,16 +1,20 @@
-package zac.demo.futureapp;
+package zac.demo.futureapp.service;
 
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+
+import org.springframework.stereotype.Service;
+
+import jakarta.annotation.PreDestroy;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Generic async executor wrapper around CompletableFuture.
@@ -30,9 +34,7 @@ public class AsyncExecutorService {
     public AsyncExecutorService() {
         // A bounded pool for CPU-ish work; tune as needed.
         this.platformExecutor = Executors.newFixedThreadPool(
-                Math.max(4, Runtime.getRuntime().availableProcessors())
-        );
-
+                Math.max(4, Runtime.getRuntime().availableProcessors()));
         // Virtual threads for I/O-heavy tasks.
         this.virtualExecutor = Executors.newVirtualThreadPerTaskExecutor();
     }
@@ -80,8 +82,7 @@ public class AsyncExecutorService {
 
     public <T, R> CompletableFuture<R> executeAndThen(
             Supplier<T> first,
-            Function<T, CompletableFuture<R>> second
-    ) {
+            Function<T, CompletableFuture<R>> second) {
         return executeAsyncVirtual(first).thenCompose(second);
     }
 

@@ -1,4 +1,4 @@
-package zac.demo.futureapp;
+package zac.demo.futureapp.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -6,6 +6,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
+import zac.demo.futureapp.service.*;
+import zac.demo.futureapp.types.*;
+
 
 /**
  * REST controller demonstrating "fire-and-track" async jobs.

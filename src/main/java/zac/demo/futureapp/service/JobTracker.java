@@ -1,4 +1,4 @@
-package zac.demo.futureapp;
+package zac.demo.futureapp.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -12,6 +12,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
+import zac.demo.futureapp.types.*;
+
 
 /**
  * Simple in-memory job tracker.

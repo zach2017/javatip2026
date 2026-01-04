@@ -1,4 +1,4 @@
-package zac.demo.futureapp;
+package zac.demo.futureapp.types;
 
 public enum JobStatus {
     QUEUED,
