@@ -1,0 +1,1253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Attack Surface Explorer</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:          #0a0e14;
+    --bg-grid:     #0f151e;
+    --panel:       #111825;
+    --panel-2:     #0d1420;
+    --border:      #1f2937;
+    --border-str:  #374151;
+    --text:        #e5e7eb;
+    --text-muted:  #9ca3af;
+    --text-dim:    #6b7280;
+    --accent:      #f59e0b;
+    --accent-str:  #fbbf24;
+    --crit:        #ef4444;
+    --high:        #f97316;
+    --med:         #eab308;
+    --low:         #64748b;
+    --edge:        #334155;
+    --selected:    #fde68a;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: "ss01", "cv11";
+    letter-spacing: -0.01em;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-position: -1px -1px;
+  }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace; }
+  .caps { text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; }
+
+  /* ---- severity chips ---- */
+  .sev { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 2px;
+         font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+         border: 1px solid currentColor; background: color-mix(in srgb, currentColor 12%, transparent); }
+  .sev-critical { color: var(--crit); box-shadow: 0 0 12px -4px var(--crit); }
+  .sev-high     { color: var(--high); }
+  .sev-medium   { color: var(--med); }
+  .sev-low      { color: var(--low); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none;
+         box-shadow: 0 0 8px currentColor; }
+  .dot-sm { width: 6px; height: 6px; }
+
+  /* ---- panels ---- */
+  .panel { background: var(--panel); border: 1px solid var(--border); }
+  .panel-soft { background: var(--panel-2); border: 1px solid var(--border); }
+
+  /* ---- class card ---- */
+  .class-card {
+    background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    transition: border-color 0.2s;
+  }
+  .class-card:hover { border-color: var(--border-str); }
+
+  .method-row {
+    position: relative;
+    padding: 8px 10px 8px 14px;
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  .method-row:hover { background: rgba(245, 158, 11, 0.05); border-left-color: var(--accent); }
+  .method-row.selected { background: rgba(245, 158, 11, 0.12); border-left-color: var(--accent-str); }
+
+  .sink-row {
+    position: relative;
+    padding: 4px 10px 4px 34px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.1s;
+  }
+  .sink-row::before {
+    content: ""; position: absolute; left: 22px; top: 0; bottom: 50%;
+    border-left: 1px solid var(--edge); border-bottom: 1px solid var(--edge);
+    width: 8px;
+  }
+  .sink-row:hover { background: rgba(245, 158, 11, 0.05); }
+  .sink-row.selected { background: rgba(245, 158, 11, 0.12); color: var(--selected); }
+
+  /* ---- category pill ---- */
+  .catpill { display: inline-block; padding: 1px 6px; border-radius: 2px;
+             font-size: 10px; font-weight: 500; letter-spacing: 0.04em;
+             background: rgba(148, 163, 184, 0.1); color: var(--text-muted);
+             border: 1px solid var(--border); }
+
+  /* ---- scrollbars ---- */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border-str); border-radius: 0; }
+  ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+  /* ---- buttons ---- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; font-size: 12px; font-weight: 500;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border-str);
+    border-radius: 2px; cursor: pointer; transition: all 0.15s;
+    letter-spacing: 0.02em;
+  }
+  .btn:hover { background: #1a2332; border-color: var(--accent); color: var(--accent-str); }
+  .btn-primary {
+    background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+    border-color: var(--accent); color: var(--accent-str);
+  }
+  .btn-primary:hover { background: color-mix(in srgb, var(--accent) 25%, var(--panel)); }
+  .btn-ghost { background: transparent; border-color: transparent; color: var(--text-muted); }
+  .btn-ghost:hover { background: var(--panel); border-color: var(--border); color: var(--text); }
+
+  input[type=text], input[type=file], textarea, select {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); padding: 6px 10px;
+    border-radius: 2px; font-size: 13px;
+    font-family: inherit;
+  }
+  input[type=text]:focus, textarea:focus, select:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .tag-input { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+  .checkbox-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer;
+                  font-size: 12px; color: var(--text-muted); }
+  .checkbox-row:hover { color: var(--text); }
+  .checkbox-row input { accent-color: var(--accent); }
+
+  /* ---- annotation blocks ---- */
+  .anno-block {
+    background: var(--panel-2); border: 1px solid var(--border);
+    padding: 10px 12px; margin-bottom: 8px; border-radius: 2px;
+  }
+  .anno-label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+                color: var(--text-dim); font-weight: 600; }
+
+  /* ---- status badges for annotations ---- */
+  .status-open       { color: #60a5fa; }
+  .status-in-progress{ color: #f59e0b; }
+  .status-done       { color: #34d399; }
+  .status-planned    { color: #a78bfa; }
+
+  /* ---- report view (print) ---- */
+  .report-view {
+    position: fixed; inset: 0; background: white; color: #111;
+    overflow: auto; padding: 40px 60px; z-index: 50; display: none;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .report-view h1 { font-size: 28px; margin: 0 0 4px; }
+  .report-view h2 { font-size: 20px; margin: 32px 0 8px; padding-bottom: 6px; border-bottom: 1px solid #ddd; }
+  .report-view h3 { font-size: 14px; margin: 20px 0 4px; color: #333; font-family: 'JetBrains Mono', monospace; }
+  .report-view .meta-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; font-size: 13px; color: #333; }
+  .report-view .r-finding { border-left: 3px solid #999; padding: 12px 16px; margin: 12px 0; background: #fafafa; }
+  .report-view .r-finding.crit { border-color: #dc2626; }
+  .report-view .r-finding.high { border-color: #ea580c; }
+  .report-view .r-finding.med  { border-color: #ca8a04; }
+  .report-view .r-finding.low  { border-color: #64748b; }
+  .report-view .r-snippet { background: #f0f0f0; padding: 8px 10px; font-family: 'JetBrains Mono', monospace;
+                            font-size: 12px; overflow-x: auto; white-space: pre-wrap; margin: 6px 0; }
+  .report-view .r-anno { background: #fff7e6; border: 1px solid #f0d080; padding: 8px 12px; margin: 6px 0; font-size: 13px; }
+  .report-view .r-vector { display: inline-block; background: #e5e7eb; color: #333; padding: 1px 6px; font-size: 11px; margin-right: 4px; border-radius: 2px; font-family: 'JetBrains Mono', monospace; }
+
+  @media print {
+    body > *:not(.report-view) { display: none !important; }
+    .report-view { display: block !important; position: static; padding: 0; }
+    .no-print { display: none !important; }
+    .r-finding { page-break-inside: avoid; }
+  }
+
+  /* ---- empty state ---- */
+  .drop-zone {
+    border: 2px dashed var(--border-str); border-radius: 4px;
+    padding: 60px 40px; text-align: center; color: var(--text-muted);
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .drop-zone.dragover { border-color: var(--accent); background: rgba(245, 158, 11, 0.05); color: var(--accent-str); }
+
+  /* ---- details/summary styling ---- */
+  details > summary { cursor: pointer; list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+  .chev { display: inline-block; width: 10px; transition: transform 0.15s; color: var(--text-dim); }
+  details[open] > summary .chev { transform: rotate(90deg); }
+</style>
+</head>
+<body class="h-full">
+
+<!-- ====================================================================
+     TOP BAR
+     ==================================================================== -->
+<header class="panel border-b flex items-center justify-between px-4 py-2 no-print" style="border-top:none;border-left:none;border-right:none;">
+  <div class="flex items-center gap-4">
+    <div class="flex items-center gap-2">
+      <!-- logo mark -->
+      <svg width="22" height="22" viewBox="0 0 22 22" class="text-amber-500"><path d="M11 1 L20 6 L20 13 Q20 19 11 21 Q2 19 2 13 L2 6 Z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="11" cy="11" r="3" fill="currentColor"/></svg>
+      <div>
+        <div class="text-sm font-semibold tracking-wide">ATTACK SURFACE EXPLORER</div>
+        <div class="text-[10px] caps text-gray-500">Spring Boot 3.5.13 / Java 21 / Threat Model Workbench</div>
+      </div>
+    </div>
+  </div>
+  <div class="flex items-center gap-2">
+    <label class="btn btn-primary cursor-pointer">
+      <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1v7m0 0 3-3m-3 3L3 5M1 10h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      IMPORT YAML
+      <input type="file" accept=".yml,.yaml" id="fileInput" class="hidden">
+    </label>
+    <div class="w-px h-5 bg-gray-700 mx-1"></div>
+    <button class="btn" id="btnExportSvg" disabled>
+      <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M3 7 L5 5 L7 7 L9 4" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+      SVG
+    </button>
+    <button class="btn" id="btnExportMd" disabled>
+      <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 1h8v10H2z M4 4v4 M4 4l1 2 1-2v4 M8 4v4 M8 8 L10 6" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+      MARKDOWN
+    </button>
+    <button class="btn" id="btnExportPdf" disabled>
+      <svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 1h5l2 2v8H3z M8 1v2h2 M4 6h4 M4 8h3" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+      PDF / PRINT
+    </button>
+    <button class="btn" id="btnExportJson" disabled title="Export annotations JSON">
+      <svg width="12" height="12" viewBox="0 0 12 12"><path d="M4 2 Q2 2 2 4 V8 Q2 10 4 10 M8 2 Q10 2 10 4 V8 Q10 10 8 10" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+      ANNOTATIONS
+    </button>
+  </div>
+</header>
+
+<!-- ====================================================================
+     MAIN 3-COLUMN LAYOUT
+     ==================================================================== -->
+<div class="flex" style="height: calc(100vh - 45px);">
+
+  <!-- SIDEBAR -->
+  <aside class="panel w-72 flex-none overflow-y-auto no-print" style="border-top:none;border-left:none;border-bottom:none;">
+    <div class="p-4 border-b border-gray-800">
+      <div class="caps text-[10px] text-gray-500 mb-2">STATS</div>
+      <div id="stats" class="text-sm text-gray-500">No report loaded</div>
+    </div>
+
+    <div class="p-4 border-b border-gray-800">
+      <div class="caps text-[10px] text-gray-500 mb-2">SEARCH</div>
+      <input type="text" id="searchInput" placeholder="class, method, entry..." class="w-full tag-input" disabled>
+    </div>
+
+    <div class="p-4 border-b border-gray-800">
+      <div class="caps text-[10px] text-gray-500 mb-2">SEVERITY</div>
+      <div id="sevFilters" class="space-y-1"></div>
+    </div>
+
+    <div class="p-4 border-b border-gray-800">
+      <div class="caps text-[10px] text-gray-500 mb-2">CATEGORY</div>
+      <div id="catFilters" class="space-y-1 max-h-80 overflow-y-auto pr-1"></div>
+    </div>
+
+    <div class="p-4">
+      <div class="caps text-[10px] text-gray-500 mb-2">LEGEND</div>
+      <div class="text-xs text-gray-500 space-y-1">
+        <div class="flex items-center gap-2"><span class="sev-critical"><span class="dot"></span></span>Critical - RCE/priv-esc class</div>
+        <div class="flex items-center gap-2"><span class="sev-high"><span class="dot"></span></span>High - exposed endpoint or dangerous sink</div>
+        <div class="flex items-center gap-2"><span class="sev-medium"><span class="dot"></span></span>Medium - needs context</div>
+        <div class="flex items-center gap-2"><span class="sev-low"><span class="dot"></span></span>Low - informational</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- DIAGRAM -->
+  <main class="flex-1 overflow-auto relative" id="diagramArea">
+    <div id="empty" class="h-full flex items-center justify-center p-12">
+      <div class="drop-zone max-w-2xl w-full" id="dropZone">
+        <svg width="48" height="48" viewBox="0 0 48 48" class="mx-auto text-gray-600 mb-4"><path d="M24 4 L42 12 V24 Q42 36 24 44 Q6 36 6 24 V12 Z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="24" cy="24" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M24 18 V30 M18 24 H30" stroke="currentColor" stroke-width="1.5"/></svg>
+        <div class="text-lg mb-2">Drop your <span class="mono text-amber-400">attack-surface.yml</span> here</div>
+        <div class="text-sm">or click <span class="text-amber-400">IMPORT YAML</span> above</div>
+        <div class="mt-6 text-xs text-gray-600">Produced by the Go scanner at <span class="mono">spring-attack-surface</span></div>
+      </div>
+    </div>
+    <div id="diagram" class="p-6 grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));"></div>
+  </main>
+
+  <!-- DETAIL -->
+  <aside class="panel w-96 flex-none overflow-y-auto no-print" id="detailPanel" style="border-top:none;border-right:none;border-bottom:none;">
+    <div class="p-10 text-center text-gray-600 text-sm" id="detailEmpty">
+      Select an entry point or sink to view details and add annotations
+    </div>
+    <div id="detailContent" class="hidden"></div>
+  </aside>
+
+</div>
+
+<!-- PRINT/REPORT VIEW -->
+<div class="report-view" id="reportView"></div>
+
+<!-- ====================================================================
+     APP LOGIC
+     ==================================================================== -->
+<script>
+// ---------------------------------------------------------------------------
+// Global state - simple and explicit.
+// ---------------------------------------------------------------------------
+const state = {
+  metadata: null,
+  findings: [],
+  filters: { severity: new Set(), category: new Set(), search: '' },
+  selectedId: null,
+  annotations: {},        // findingKey -> { notes:[], issues:[], remediations:[] }
+  reportKey: null,        // stable id for this imported report (used for storage namespacing)
+};
+
+const SEV_ORDER = ['critical', 'high', 'medium', 'low'];
+const SEV_COLORS = { critical: 'sev-critical', high: 'sev-high', medium: 'sev-medium', low: 'sev-low' };
+
+// Category -> icon glyph (single character / tiny svg hint used in diagram)
+const CAT_ICON = {
+  http_endpoint: '↳',
+  actuator_endpoint: '⚙',
+  websocket_endpoint: '⇌',
+  message_listener: '✉',
+  event_listener: '⚡',
+  scheduled_task: '⏱',
+  async_execution: '⇢',
+  grpc_service: '⌁',
+  file_io_disk: '▤',
+  file_upload: '↥',
+  memory_buffer: '▦',
+  memory_cache: '◈',
+  network_outbound: '→',
+  network_inbound: '←',
+  deserialization: '☠',
+  process_exec: '!',
+  reflection: '↺',
+  xml_parser: '‹›',
+  sql_query: '∑',
+  template_engine: '𝑓',
+  crypto: '🔒',
+};
+
+// Categories that represent "entry points" (sources). Everything else is a sink.
+const ENTRY_CATEGORIES = new Set([
+  'http_endpoint', 'actuator_endpoint', 'websocket_endpoint',
+  'message_listener', 'event_listener', 'scheduled_task',
+  'async_execution', 'grpc_service',
+]);
+
+// ---------------------------------------------------------------------------
+// Finding key: stable semantic identity across rescans.
+// ---------------------------------------------------------------------------
+function findingKey(f) {
+  return [f.class || '', f.method || '', f.category || '',
+          f.entry_point || '', f.line || ''].join('::');
+}
+
+function reportKeyFor(metadata, findings) {
+  // Use scanned_path as the stable namespace for annotations across re-scans.
+  return 'as:ann:' + (metadata?.scanned_path || 'unknown');
+}
+
+// ---------------------------------------------------------------------------
+// Persistent annotation storage (window.storage). Safe if unavailable.
+// ---------------------------------------------------------------------------
+async function loadAnnotations() {
+  if (!state.reportKey) return;
+  try {
+    const r = await window.storage.get(state.reportKey);
+    if (r && r.value) {
+      state.annotations = JSON.parse(r.value);
+    }
+  } catch (e) {
+    // key not found or storage unavailable - start empty
+    state.annotations = {};
+  }
+}
+
+async function saveAnnotations() {
+  if (!state.reportKey) return;
+  try {
+    await window.storage.set(state.reportKey, JSON.stringify(state.annotations));
+  } catch (e) {
+    console.warn('annotation save failed', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// YAML import
+// ---------------------------------------------------------------------------
+async function importYamlText(text) {
+  let doc;
+  try {
+    doc = jsyaml.load(text);
+  } catch (e) {
+    alert('Could not parse YAML: ' + e.message);
+    return;
+  }
+  if (!doc || !Array.isArray(doc.attack_surface)) {
+    alert('YAML is missing an "attack_surface" array');
+    return;
+  }
+
+  state.metadata = doc.metadata || {};
+  state.findings = doc.attack_surface.map(f => ({
+    id: f.id,
+    category: f.category || 'unknown',
+    entry_point: f.entry_point || '',
+    http_method: f.http_method || '',
+    package: f.package || '',
+    class: f.class || '',
+    method: f.method || '',
+    file: f.file || '',
+    line: f.line || 0,
+    severity: f.severity || 'low',
+    description: f.description || '',
+    snippet: f.snippet || '',
+    attack_vectors: Array.isArray(f.attack_vectors) ? f.attack_vectors : [],
+  }));
+
+  state.reportKey = reportKeyFor(state.metadata, state.findings);
+  await loadAnnotations();
+
+  // Default: all severities and categories enabled.
+  state.filters.severity = new Set(SEV_ORDER);
+  state.filters.category = new Set(Object.keys(state.metadata.by_category || {}));
+  if (state.filters.category.size === 0) {
+    state.filters.category = new Set(state.findings.map(f => f.category));
+  }
+  state.filters.search = '';
+  state.selectedId = null;
+
+  // Enable export buttons
+  ['btnExportSvg','btnExportMd','btnExportPdf','btnExportJson'].forEach(id =>
+    document.getElementById(id).disabled = false);
+  document.getElementById('searchInput').disabled = false;
+  document.getElementById('empty').style.display = 'none';
+
+  renderAll();
+}
+
+// ---------------------------------------------------------------------------
+// Filtering
+// ---------------------------------------------------------------------------
+function visibleFindings() {
+  const q = state.filters.search.trim().toLowerCase();
+  return state.findings.filter(f => {
+    if (!state.filters.severity.has(f.severity)) return false;
+    if (!state.filters.category.has(f.category)) return false;
+    if (!q) return true;
+    return (f.class + ' ' + f.method + ' ' + f.entry_point + ' ' +
+            f.package + ' ' + f.description).toLowerCase().includes(q);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+function renderAll() {
+  renderStats();
+  renderFilters();
+  renderDiagram();
+  renderDetail();
+}
+
+function renderStats() {
+  const el = document.getElementById('stats');
+  if (!state.metadata) { el.textContent = 'No report loaded'; return; }
+  const m = state.metadata;
+  const visible = visibleFindings().length;
+  el.innerHTML = `
+    <div class="space-y-2">
+      <div class="flex justify-between"><span class="text-gray-400">Findings</span><span class="mono text-amber-400">${state.findings.length}</span></div>
+      <div class="flex justify-between"><span class="text-gray-400">Visible</span><span class="mono text-amber-400">${visible}</span></div>
+      <div class="flex justify-between"><span class="text-gray-400">Files</span><span class="mono">${m.files_scanned || '-'}</span></div>
+      <div class="flex justify-between"><span class="text-gray-400">Java</span><span class="mono">${m.java_version || '-'}</span></div>
+      <div class="flex justify-between"><span class="text-gray-400">Boot</span><span class="mono">${m.spring_boot_version || '-'}</span></div>
+      <div class="pt-2 mt-2 border-t border-gray-800">
+        ${SEV_ORDER.map(s => `
+          <div class="flex justify-between text-xs py-0.5">
+            <span class="${SEV_COLORS[s]}" style="color: var(--${s === 'critical' ? 'crit' : s === 'high' ? 'high' : s === 'medium' ? 'med' : 'low'})">
+              <span class="dot dot-sm mr-1"></span>${s.toUpperCase()}
+            </span>
+            <span class="mono text-gray-400">${(m.by_severity || {})[s] || 0}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function renderFilters() {
+  // Severity
+  const sevEl = document.getElementById('sevFilters');
+  if (!state.metadata) { sevEl.innerHTML = '<div class="text-xs text-gray-600">-</div>'; return; }
+  sevEl.innerHTML = SEV_ORDER.map(s => `
+    <label class="checkbox-row">
+      <input type="checkbox" ${state.filters.severity.has(s) ? 'checked' : ''} data-sev="${s}">
+      <span class="${SEV_COLORS[s]}" style="color: var(--${s === 'critical' ? 'crit' : s === 'high' ? 'high' : s === 'medium' ? 'med' : 'low'});">
+        <span class="dot dot-sm mr-1"></span>${s.toUpperCase()}
+      </span>
+      <span class="ml-auto mono text-[11px] text-gray-500">${(state.metadata.by_severity || {})[s] || 0}</span>
+    </label>`).join('');
+  sevEl.querySelectorAll('input').forEach(cb =>
+    cb.addEventListener('change', e => {
+      const s = e.target.dataset.sev;
+      e.target.checked ? state.filters.severity.add(s) : state.filters.severity.delete(s);
+      renderDiagram(); renderStats();
+    }));
+
+  // Category
+  const catEl = document.getElementById('catFilters');
+  const cats = Object.keys(state.metadata.by_category || {}).sort();
+  catEl.innerHTML = cats.map(c => `
+    <label class="checkbox-row">
+      <input type="checkbox" ${state.filters.category.has(c) ? 'checked' : ''} data-cat="${c}">
+      <span class="mono text-[11px]">${CAT_ICON[c] || '•'}</span>
+      <span>${c}</span>
+      <span class="ml-auto mono text-[11px] text-gray-500">${state.metadata.by_category[c]}</span>
+    </label>`).join('');
+  catEl.querySelectorAll('input').forEach(cb =>
+    cb.addEventListener('change', e => {
+      const c = e.target.dataset.cat;
+      e.target.checked ? state.filters.category.add(c) : state.filters.category.delete(c);
+      renderDiagram(); renderStats();
+    }));
+}
+
+function renderDiagram() {
+  const el = document.getElementById('diagram');
+  const findings = visibleFindings();
+  if (findings.length === 0) {
+    el.innerHTML = '<div class="col-span-full text-center text-gray-500 py-20 text-sm">No findings match the current filters</div>';
+    return;
+  }
+
+  // Group: package.class -> class card
+  const groups = new Map();
+  for (const f of findings) {
+    const key = (f.package ? f.package + '.' : '') + f.class;
+    if (!groups.has(key)) groups.set(key, { pkg: f.package, cls: f.class, items: [] });
+    groups.get(key).items.push(f);
+  }
+
+  // Sort groups by most severe finding in the group, then by class name
+  const sevRank = s => ({critical:4,high:3,medium:2,low:1})[s] || 0;
+  const groupsArr = Array.from(groups.values()).sort((a,b) => {
+    const sa = Math.max(...a.items.map(f => sevRank(f.severity)));
+    const sb = Math.max(...b.items.map(f => sevRank(f.severity)));
+    if (sa !== sb) return sb - sa;
+    return a.cls.localeCompare(b.cls);
+  });
+
+  el.innerHTML = groupsArr.map(g => renderClassCard(g)).join('');
+
+  // Wire clicks
+  el.querySelectorAll('[data-finding-id]').forEach(n =>
+    n.addEventListener('click', e => {
+      e.stopPropagation();
+      state.selectedId = parseInt(n.dataset.findingId, 10);
+      renderDiagram();
+      renderDetail();
+    }));
+}
+
+function renderClassCard(g) {
+  // Within a class, split into (a) methods with an entry point + their sinks,
+  // (b) class-level findings without a method, (c) orphan sinks (sinks in
+  // methods that have no entry annotation).
+  const byMethod = new Map();
+  const classLevel = [];
+  for (const f of g.items) {
+    if (!f.method) { classLevel.push(f); continue; }
+    if (!byMethod.has(f.method)) byMethod.set(f.method, { entries: [], sinks: [] });
+    const bucket = byMethod.get(f.method);
+    if (ENTRY_CATEGORIES.has(f.category)) bucket.entries.push(f);
+    else bucket.sinks.push(f);
+  }
+
+  // Order methods: ones with entries first (by max severity), then orphan-sink methods.
+  const sevRank = s => ({critical:4,high:3,medium:2,low:1})[s] || 0;
+  const methodEntries = Array.from(byMethod.entries()).sort((a,b) => {
+    const [, av] = a, [, bv] = b;
+    const aHas = av.entries.length > 0 ? 1 : 0;
+    const bHas = bv.entries.length > 0 ? 1 : 0;
+    if (aHas !== bHas) return bHas - aHas;
+    const sa = Math.max(0, ...[...av.entries, ...av.sinks].map(f => sevRank(f.severity)));
+    const sb = Math.max(0, ...[...bv.entries, ...bv.sinks].map(f => sevRank(f.severity)));
+    return sb - sa;
+  });
+
+  const cardSevSummary = (() => {
+    const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+    g.items.forEach(f => counts[f.severity]++);
+    return SEV_ORDER.filter(s => counts[s] > 0).map(s => `
+      <span class="${SEV_COLORS[s]}" style="color: var(--${s === 'critical' ? 'crit' : s === 'high' ? 'high' : s === 'medium' ? 'med' : 'low'}); font-size:10px; padding:1px 5px;">
+        ${counts[s]}
+      </span>`).join('');
+  })();
+
+  return `
+    <div class="class-card">
+      <div class="flex items-center justify-between px-3 py-2 border-b border-gray-800">
+        <div class="min-w-0">
+          <div class="mono text-sm font-semibold text-gray-100 truncate">${escapeHtml(g.cls)}</div>
+          <div class="mono text-[10px] text-gray-500 truncate">${escapeHtml(g.pkg || '(default)')}</div>
+        </div>
+        <div class="flex gap-1 flex-none">${cardSevSummary}</div>
+      </div>
+      <div class="py-1">
+        ${methodEntries.map(([name, bucket]) => renderMethodBlock(name, bucket)).join('')}
+        ${classLevel.length ? `<div class="px-3 py-1 text-[10px] caps text-gray-500 border-t border-gray-800 mt-1">Class-level</div>${classLevel.map(f => renderSinkRow(f)).join('')}` : ''}
+      </div>
+    </div>`;
+}
+
+function renderMethodBlock(name, bucket) {
+  // Header row: either the entry point (if any) or the bare method name.
+  const entry = bucket.entries[0];
+  const extraEntries = bucket.entries.slice(1);
+  let header;
+  if (entry) {
+    header = renderEntryRow(entry, name);
+  } else {
+    header = `
+      <div class="method-row" style="cursor: default;">
+        <div class="flex items-center gap-2">
+          <span class="mono text-[11px] text-gray-500">fn</span>
+          <span class="mono text-xs text-gray-300">${escapeHtml(name)}()</span>
+          <span class="ml-auto text-[10px] text-gray-600">orphan sinks</span>
+        </div>
+      </div>`;
+  }
+  const extra = extraEntries.map(e => renderEntryRow(e, name)).join('');
+  const sinks = bucket.sinks.map(s => renderSinkRow(s)).join('');
+  return header + extra + sinks;
+}
+
+function renderEntryRow(f, methodName) {
+  const sel = state.selectedId === f.id ? 'selected' : '';
+  const sevCls = SEV_COLORS[f.severity];
+  const sevVar = f.severity === 'critical' ? 'crit' : f.severity === 'high' ? 'high' : f.severity === 'medium' ? 'med' : 'low';
+  const hasAnno = state.annotations[findingKey(f)];
+  const annoDot = hasAnno && ((hasAnno.notes||[]).length + (hasAnno.issues||[]).length + (hasAnno.remediations||[]).length) > 0
+    ? '<span class="text-amber-500 text-xs ml-1" title="has annotations">✱</span>' : '';
+  return `
+    <div class="method-row ${sel}" data-finding-id="${f.id}">
+      <div class="flex items-center gap-2">
+        <span class="${sevCls}" style="color: var(--${sevVar})"><span class="dot dot-sm"></span></span>
+        <span class="mono text-[11px] text-gray-500">${CAT_ICON[f.category] || '•'}</span>
+        <span class="mono text-xs text-gray-100 truncate" title="${escapeHtml(f.entry_point)}">${escapeHtml(f.entry_point || f.category)}</span>
+        ${annoDot}
+        <span class="ml-auto sev ${sevCls}" style="color: var(--${sevVar})">${f.severity}</span>
+      </div>
+      <div class="mono text-[10px] text-gray-500 mt-0.5 pl-5 truncate">${escapeHtml(methodName)}()  <span class="text-gray-700">·</span>  ${escapeHtml(f.category)}</div>
+    </div>`;
+}
+
+function renderSinkRow(f) {
+  const sel = state.selectedId === f.id ? 'selected' : '';
+  const sevVar = f.severity === 'critical' ? 'crit' : f.severity === 'high' ? 'high' : f.severity === 'medium' ? 'med' : 'low';
+  const hasAnno = state.annotations[findingKey(f)];
+  const annoDot = hasAnno && ((hasAnno.notes||[]).length + (hasAnno.issues||[]).length + (hasAnno.remediations||[]).length) > 0
+    ? '<span class="text-amber-500 text-[10px]" title="has annotations">✱</span>' : '';
+  return `
+    <div class="sink-row ${sel}" data-finding-id="${f.id}">
+      <div class="flex items-center gap-2">
+        <span style="color: var(--${sevVar});"><span class="dot dot-sm"></span></span>
+        <span class="mono text-[11px] text-gray-500">${CAT_ICON[f.category] || '•'}</span>
+        <span class="mono text-[11px] text-gray-300 truncate">${escapeHtml(f.category)}</span>
+        ${annoDot}
+        <span class="ml-auto mono text-[10px] text-gray-600">L${f.line}</span>
+      </div>
+    </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Detail panel
+// ---------------------------------------------------------------------------
+function renderDetail() {
+  const emptyEl = document.getElementById('detailEmpty');
+  const contentEl = document.getElementById('detailContent');
+  if (state.selectedId == null) {
+    emptyEl.classList.remove('hidden');
+    contentEl.classList.add('hidden');
+    return;
+  }
+  const f = state.findings.find(x => x.id === state.selectedId);
+  if (!f) return;
+  emptyEl.classList.add('hidden');
+  contentEl.classList.remove('hidden');
+
+  const key = findingKey(f);
+  const ann = state.annotations[key] || { notes: [], issues: [], remediations: [] };
+  const sevVar = f.severity === 'critical' ? 'crit' : f.severity === 'high' ? 'high' : f.severity === 'medium' ? 'med' : 'low';
+
+  contentEl.innerHTML = `
+    <div class="border-b border-gray-800 p-4">
+      <div class="flex items-start justify-between gap-2 mb-2">
+        <span class="sev ${SEV_COLORS[f.severity]}" style="color: var(--${sevVar})">${f.severity}</span>
+        <button class="btn-ghost btn text-xs" id="detailClose">CLOSE</button>
+      </div>
+      <div class="mono text-sm text-amber-300 break-all leading-snug">${escapeHtml(f.entry_point)}</div>
+      <div class="mono text-[11px] text-gray-500 mt-1">${CAT_ICON[f.category] || '•'} ${escapeHtml(f.category)}${f.http_method ? ' · ' + escapeHtml(f.http_method) : ''}</div>
+    </div>
+
+    <div class="p-4 border-b border-gray-800 space-y-2 text-xs">
+      <div class="grid grid-cols-3 gap-2">
+        <div class="text-gray-500">Package</div><div class="mono col-span-2 text-gray-300 break-all">${escapeHtml(f.package || '-')}</div>
+        <div class="text-gray-500">Class</div>  <div class="mono col-span-2 text-gray-200">${escapeHtml(f.class)}</div>
+        <div class="text-gray-500">Method</div> <div class="mono col-span-2 text-gray-200">${escapeHtml(f.method || '(class-level)')}</div>
+        <div class="text-gray-500">File</div>   <div class="mono col-span-2 text-gray-400 text-[11px] break-all">${escapeHtml(shortenPath(f.file))}</div>
+        <div class="text-gray-500">Line</div>   <div class="mono col-span-2 text-gray-200">${f.line}</div>
+      </div>
+    </div>
+
+    <div class="p-4 border-b border-gray-800">
+      <div class="anno-label mb-2">DESCRIPTION</div>
+      <div class="text-sm text-gray-300 leading-relaxed">${escapeHtml(f.description)}</div>
+    </div>
+
+    ${f.snippet ? `<div class="p-4 border-b border-gray-800">
+      <div class="anno-label mb-2">SNIPPET</div>
+      <pre class="mono text-[11px] text-gray-300 bg-black bg-opacity-40 p-2 rounded whitespace-pre-wrap break-all">${escapeHtml(f.snippet)}</pre>
+    </div>` : ''}
+
+    ${f.attack_vectors.length ? `<div class="p-4 border-b border-gray-800">
+      <div class="anno-label mb-2">ATTACK VECTORS</div>
+      <div class="flex flex-wrap gap-1">${f.attack_vectors.map(v => `<span class="catpill mono">${escapeHtml(v)}</span>`).join('')}</div>
+    </div>` : ''}
+
+    <!-- NOTES -->
+    <div class="p-4 border-b border-gray-800">
+      <div class="flex items-center justify-between mb-2">
+        <span class="anno-label">NOTES</span>
+        <button class="btn btn-ghost text-xs" id="addNote">+ add</button>
+      </div>
+      <div id="notesList"></div>
+    </div>
+
+    <!-- ISSUES / STORIES -->
+    <div class="p-4 border-b border-gray-800">
+      <div class="flex items-center justify-between mb-2">
+        <span class="anno-label">ISSUES / STORIES</span>
+        <button class="btn btn-ghost text-xs" id="addIssue">+ add</button>
+      </div>
+      <div id="issuesList"></div>
+    </div>
+
+    <!-- REMEDIATIONS -->
+    <div class="p-4">
+      <div class="flex items-center justify-between mb-2">
+        <span class="anno-label">REMEDIATIONS / PROTECTIONS</span>
+        <button class="btn btn-ghost text-xs" id="addRemediation">+ add</button>
+      </div>
+      <div id="remList"></div>
+    </div>
+  `;
+
+  document.getElementById('detailClose').addEventListener('click', () => {
+    state.selectedId = null; renderDiagram(); renderDetail();
+  });
+
+  renderNotes(key, ann);
+  renderIssues(key, ann);
+  renderRemediations(key, ann);
+
+  document.getElementById('addNote').addEventListener('click', () => {
+    ensureAnno(key).notes.push({ text: '', ts: Date.now() });
+    saveAnnotations(); renderNotes(key, state.annotations[key]);
+  });
+  document.getElementById('addIssue').addEventListener('click', () => {
+    ensureAnno(key).issues.push({ title: '', story: '', status: 'open', assignee: '', ts: Date.now() });
+    saveAnnotations(); renderIssues(key, state.annotations[key]);
+  });
+  document.getElementById('addRemediation').addEventListener('click', () => {
+    ensureAnno(key).remediations.push({ title: '', details: '', status: 'planned', ts: Date.now() });
+    saveAnnotations(); renderRemediations(key, state.annotations[key]);
+  });
+}
+
+function ensureAnno(key) {
+  if (!state.annotations[key]) state.annotations[key] = { notes: [], issues: [], remediations: [] };
+  return state.annotations[key];
+}
+
+function renderNotes(key, ann) {
+  const el = document.getElementById('notesList');
+  const notes = (ann && ann.notes) || [];
+  if (!notes.length) { el.innerHTML = '<div class="text-xs text-gray-600 italic">no notes</div>'; return; }
+  el.innerHTML = notes.map((n, i) => `
+    <div class="anno-block">
+      <textarea data-i="${i}" rows="3" class="w-full" placeholder="Observation, context, risk assessment...">${escapeHtml(n.text || '')}</textarea>
+      <div class="flex items-center justify-between mt-1">
+        <span class="text-[10px] text-gray-600 mono">${new Date(n.ts || Date.now()).toISOString().slice(0,16).replace('T',' ')}</span>
+        <button class="text-[10px] text-red-400 hover:text-red-300" data-del="${i}">DELETE</button>
+      </div>
+    </div>`).join('');
+  el.querySelectorAll('textarea').forEach(t => t.addEventListener('input', e => {
+    const i = parseInt(e.target.dataset.i, 10);
+    ensureAnno(key).notes[i].text = e.target.value;
+    saveAnnotations(); refreshAnnoMarker(key);
+  }));
+  el.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => {
+    const i = parseInt(e.target.dataset.del, 10);
+    ensureAnno(key).notes.splice(i, 1);
+    saveAnnotations(); renderNotes(key, state.annotations[key]); refreshAnnoMarker(key);
+  }));
+}
+
+function renderIssues(key, ann) {
+  const el = document.getElementById('issuesList');
+  const issues = (ann && ann.issues) || [];
+  if (!issues.length) { el.innerHTML = '<div class="text-xs text-gray-600 italic">no issues / stories</div>'; return; }
+  el.innerHTML = issues.map((it, i) => `
+    <div class="anno-block">
+      <input type="text" data-field="title" data-i="${i}" class="w-full mb-1" placeholder="Issue title" value="${escapeHtml(it.title || '')}">
+      <textarea data-field="story" data-i="${i}" rows="2" class="w-full mb-1" placeholder="As a ... I want ... so that ...">${escapeHtml(it.story || '')}</textarea>
+      <div class="flex gap-1 items-center">
+        <select data-field="status" data-i="${i}" class="text-xs">
+          <option value="open" ${it.status==='open'?'selected':''}>OPEN</option>
+          <option value="in-progress" ${it.status==='in-progress'?'selected':''}>IN-PROGRESS</option>
+          <option value="done" ${it.status==='done'?'selected':''}>DONE</option>
+        </select>
+        <input type="text" data-field="assignee" data-i="${i}" class="flex-1 text-xs" placeholder="@assignee" value="${escapeHtml(it.assignee || '')}">
+        <button class="text-[10px] text-red-400 hover:text-red-300" data-del="${i}">DEL</button>
+      </div>
+    </div>`).join('');
+  el.querySelectorAll('[data-field]').forEach(inp => inp.addEventListener('input', e => {
+    const i = parseInt(e.target.dataset.i, 10);
+    const field = e.target.dataset.field;
+    ensureAnno(key).issues[i][field] = e.target.value;
+    saveAnnotations(); refreshAnnoMarker(key);
+  }));
+  el.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => {
+    const i = parseInt(e.target.dataset.del, 10);
+    ensureAnno(key).issues.splice(i, 1);
+    saveAnnotations(); renderIssues(key, state.annotations[key]); refreshAnnoMarker(key);
+  }));
+}
+
+function renderRemediations(key, ann) {
+  const el = document.getElementById('remList');
+  const rems = (ann && ann.remediations) || [];
+  if (!rems.length) { el.innerHTML = '<div class="text-xs text-gray-600 italic">no remediations planned</div>'; return; }
+  el.innerHTML = rems.map((r, i) => `
+    <div class="anno-block">
+      <input type="text" data-field="title" data-i="${i}" class="w-full mb-1" placeholder="Control / mitigation title" value="${escapeHtml(r.title || '')}">
+      <textarea data-field="details" data-i="${i}" rows="3" class="w-full mb-1" placeholder="Technical details, references, spec...">${escapeHtml(r.details || '')}</textarea>
+      <div class="flex gap-1 items-center">
+        <select data-field="status" data-i="${i}" class="text-xs">
+          <option value="planned" ${r.status==='planned'?'selected':''}>PLANNED</option>
+          <option value="in-progress" ${r.status==='in-progress'?'selected':''}>IN-PROGRESS</option>
+          <option value="done" ${r.status==='done'?'selected':''}>IMPLEMENTED</option>
+        </select>
+        <span class="flex-1"></span>
+        <button class="text-[10px] text-red-400 hover:text-red-300" data-del="${i}">DEL</button>
+      </div>
+    </div>`).join('');
+  el.querySelectorAll('[data-field]').forEach(inp => inp.addEventListener('input', e => {
+    const i = parseInt(e.target.dataset.i, 10);
+    const field = e.target.dataset.field;
+    ensureAnno(key).remediations[i][field] = e.target.value;
+    saveAnnotations(); refreshAnnoMarker(key);
+  }));
+  el.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => {
+    const i = parseInt(e.target.dataset.del, 10);
+    ensureAnno(key).remediations.splice(i, 1);
+    saveAnnotations(); renderRemediations(key, state.annotations[key]); refreshAnnoMarker(key);
+  }));
+}
+
+function refreshAnnoMarker(key) {
+  // After an annotation edit, re-render the diagram so the "✱" marker updates.
+  // Cheap enough - these diagrams top out in the hundreds of nodes.
+  renderDiagram();
+}
+
+// ---------------------------------------------------------------------------
+// Exports
+// ---------------------------------------------------------------------------
+function exportSVG() {
+  // Rasterize the current diagram into a standalone SVG. We build the SVG
+  // from the data (not a DOM capture) so styling is guaranteed to survive
+  // outside the browser.
+  const findings = visibleFindings();
+  const groups = new Map();
+  for (const f of findings) {
+    const key = (f.package ? f.package + '.' : '') + f.class;
+    if (!groups.has(key)) groups.set(key, { pkg: f.package, cls: f.class, items: [] });
+    groups.get(key).items.push(f);
+  }
+  const cols = 3;
+  const cardW = 360, padX = 24, padY = 24, rowH = 20, headerH = 54;
+  const sevFill = { critical: '#ef4444', high: '#f97316', medium: '#eab308', low: '#64748b' };
+
+  let x = padX, y = padY, maxY = 0;
+  const cardsSvg = [];
+  let col = 0;
+
+  const gArr = Array.from(groups.values()).sort((a, b) => a.cls.localeCompare(b.cls));
+  for (const g of gArr) {
+    // Split into entries + sinks per method
+    const rows = [];
+    rows.push({ type: 'header', cls: g.cls, pkg: g.pkg || '(default)', count: g.items.length });
+    const byMethod = new Map();
+    const classLevel = [];
+    for (const f of g.items) {
+      if (!f.method) { classLevel.push(f); continue; }
+      if (!byMethod.has(f.method)) byMethod.set(f.method, { entries: [], sinks: [] });
+      const b = byMethod.get(f.method);
+      (ENTRY_CATEGORIES.has(f.category) ? b.entries : b.sinks).push(f);
+    }
+    for (const [name, b] of byMethod.entries()) {
+      for (const e of b.entries) rows.push({ type: 'entry', name, f: e });
+      if (b.entries.length === 0) rows.push({ type: 'methodBare', name });
+      for (const s of b.sinks) rows.push({ type: 'sink', f: s });
+    }
+    for (const f of classLevel) rows.push({ type: 'classLvl', f });
+
+    const cardH = headerH + rows.filter(r => r.type !== 'header').length * rowH + 10;
+    const cardX = x, cardY = y;
+
+    cardsSvg.push(`
+      <rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" fill="#111825" stroke="#374151"/>
+      <line x1="${cardX}" y1="${cardY + headerH - 6}" x2="${cardX + cardW}" y2="${cardY + headerH - 6}" stroke="#1f2937"/>
+      <text x="${cardX + 12}" y="${cardY + 22}" fill="#e5e7eb" font-family="JetBrains Mono, monospace" font-size="13" font-weight="600">${escXml(g.cls)}</text>
+      <text x="${cardX + 12}" y="${cardY + 40}" fill="#6b7280" font-family="JetBrains Mono, monospace" font-size="10">${escXml(g.pkg || '(default)')}</text>
+    `);
+
+    let ry = cardY + headerH;
+    for (const r of rows) {
+      if (r.type === 'header') continue;
+      if (r.type === 'entry') {
+        cardsSvg.push(`
+          <circle cx="${cardX + 14}" cy="${ry + 10}" r="4" fill="${sevFill[r.f.severity]}"/>
+          <text x="${cardX + 26}" y="${ry + 14}" fill="#e5e7eb" font-family="JetBrains Mono, monospace" font-size="11">${escXml(truncate(r.f.entry_point, 36))}</text>
+          <text x="${cardX + cardW - 12}" y="${ry + 14}" text-anchor="end" fill="${sevFill[r.f.severity]}" font-family="IBM Plex Sans, sans-serif" font-size="9" font-weight="700" letter-spacing="1">${r.f.severity.toUpperCase()}</text>
+        `);
+      } else if (r.type === 'methodBare') {
+        cardsSvg.push(`<text x="${cardX + 14}" y="${ry + 14}" fill="#9ca3af" font-family="JetBrains Mono, monospace" font-size="11">${escXml(r.name)}()</text>`);
+      } else if (r.type === 'sink' || r.type === 'classLvl') {
+        cardsSvg.push(`
+          <line x1="${cardX + 22}" y1="${ry}" x2="${cardX + 22}" y2="${ry + 10}" stroke="#334155"/>
+          <line x1="${cardX + 22}" y1="${ry + 10}" x2="${cardX + 30}" y2="${ry + 10}" stroke="#334155"/>
+          <circle cx="${cardX + 34}" cy="${ry + 10}" r="3" fill="${sevFill[r.f.severity]}"/>
+          <text x="${cardX + 42}" y="${ry + 14}" fill="#cbd5e1" font-family="JetBrains Mono, monospace" font-size="10">${escXml(r.f.category)}</text>
+          <text x="${cardX + cardW - 12}" y="${ry + 14}" text-anchor="end" fill="#6b7280" font-family="JetBrains Mono, monospace" font-size="9">L${r.f.line}</text>
+        `);
+      }
+      ry += rowH;
+    }
+
+    maxY = Math.max(maxY, cardY + cardH);
+    col++;
+    if (col >= cols) {
+      col = 0; x = padX; y = maxY + padY;
+    } else {
+      x += cardW + padX;
+    }
+  }
+
+  const totalW = padX + cols * (cardW + padX);
+  const totalH = maxY + padY + 60;
+  const title = `Attack Surface - ${state.metadata.scanned_path || ''}`;
+
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}">
+  <rect width="100%" height="100%" fill="#0a0e14"/>
+  <text x="${padX}" y="28" fill="#f59e0b" font-family="IBM Plex Sans, sans-serif" font-size="16" font-weight="700" letter-spacing="2">ATTACK SURFACE MAP</text>
+  <text x="${padX}" y="46" fill="#9ca3af" font-family="JetBrains Mono, monospace" font-size="11">${escXml(title)}</text>
+  <g transform="translate(0, 40)">
+    ${cardsSvg.join('')}
+  </g>
+  <text x="${padX}" y="${totalH - 20}" fill="#6b7280" font-family="JetBrains Mono, monospace" font-size="10">${state.findings.length} total findings · ${findings.length} visible · generated ${new Date().toISOString().slice(0,16).replace('T',' ')}</text>
+</svg>`;
+
+  download('attack-surface.svg', svg, 'image/svg+xml');
+}
+
+function exportMarkdown() {
+  const m = state.metadata || {};
+  const findings = state.findings;
+  const lines = [];
+  lines.push('# Attack Surface Report');
+  lines.push('');
+  lines.push(`**Scanned path:** \`${m.scanned_path || ''}\``);
+  lines.push(`**Scan time:** ${m.scan_time || ''}`);
+  lines.push(`**Stack:** Java ${m.java_version || '?'} · Spring Framework ${m.spring_framework_version || '?'} · Spring Boot ${m.spring_boot_version || '?'}`);
+  lines.push(`**Files scanned:** ${m.files_scanned || 0}`);
+  lines.push(`**Total findings:** ${findings.length}`);
+  lines.push('');
+  lines.push('## Severity distribution');
+  lines.push('');
+  lines.push('| Severity | Count |');
+  lines.push('|----------|-------|');
+  SEV_ORDER.forEach(s => lines.push(`| ${s} | ${(m.by_severity || {})[s] || 0} |`));
+  lines.push('');
+  lines.push('## Category distribution');
+  lines.push('');
+  lines.push('| Category | Count |');
+  lines.push('|----------|-------|');
+  Object.keys(m.by_category || {}).sort().forEach(c =>
+    lines.push(`| ${c} | ${m.by_category[c]} |`));
+  lines.push('');
+  lines.push('## Findings');
+  lines.push('');
+
+  const sevRank = s => ({critical:4,high:3,medium:2,low:1})[s] || 0;
+  const sorted = findings.slice().sort((a,b) => {
+    if (sevRank(a.severity) !== sevRank(b.severity)) return sevRank(b.severity) - sevRank(a.severity);
+    if (a.class !== b.class) return a.class.localeCompare(b.class);
+    return a.line - b.line;
+  });
+  for (const f of sorted) {
+    lines.push(`### [${f.severity.toUpperCase()}] ${f.entry_point}`);
+    lines.push('');
+    lines.push(`- **Category:** \`${f.category}\``);
+    if (f.http_method) lines.push(`- **HTTP method:** \`${f.http_method}\``);
+    lines.push(`- **Class:** \`${f.package}.${f.class}\``);
+    lines.push(`- **Method:** \`${f.method || '(class-level)'}\``);
+    lines.push(`- **Location:** \`${shortenPath(f.file)}:${f.line}\``);
+    lines.push(`- **Attack vectors:** ${f.attack_vectors.map(v => `\`${v}\``).join(', ') || '_none_'}`);
+    lines.push('');
+    lines.push(`> ${f.description}`);
+    lines.push('');
+    if (f.snippet) {
+      lines.push('```java');
+      lines.push(f.snippet);
+      lines.push('```');
+      lines.push('');
+    }
+    const ann = state.annotations[findingKey(f)];
+    if (ann) {
+      if ((ann.notes || []).length) {
+        lines.push('**Notes:**');
+        ann.notes.forEach(n => { if (n.text) lines.push('- ' + n.text.replace(/\n/g, '\n  ')); });
+        lines.push('');
+      }
+      if ((ann.issues || []).length) {
+        lines.push('**Issues / Stories:**');
+        ann.issues.forEach(it => {
+          lines.push(`- **[${(it.status || 'open').toUpperCase()}]** ${it.title || '(untitled)'}${it.assignee ? ' — ' + it.assignee : ''}`);
+          if (it.story) lines.push('  ' + it.story.replace(/\n/g, '\n  '));
+        });
+        lines.push('');
+      }
+      if ((ann.remediations || []).length) {
+        lines.push('**Remediations / Protections:**');
+        ann.remediations.forEach(r => {
+          lines.push(`- **[${(r.status || 'planned').toUpperCase()}]** ${r.title || '(untitled)'}`);
+          if (r.details) lines.push('  ' + r.details.replace(/\n/g, '\n  '));
+        });
+        lines.push('');
+      }
+    }
+    lines.push('---');
+    lines.push('');
+  }
+
+  download('attack-surface-report.md', lines.join('\n'), 'text/markdown');
+}
+
+function exportAnnotationsJSON() {
+  const payload = {
+    report_key: state.reportKey,
+    scanned_path: state.metadata?.scanned_path,
+    exported_at: new Date().toISOString(),
+    annotations: state.annotations,
+  };
+  download('annotations.json', JSON.stringify(payload, null, 2), 'application/json');
+}
+
+function buildReportHTML() {
+  const m = state.metadata || {};
+  const findings = state.findings;
+  const sevRank = s => ({critical:4,high:3,medium:2,low:1})[s] || 0;
+  const sorted = findings.slice().sort((a,b) => {
+    if (sevRank(a.severity) !== sevRank(b.severity)) return sevRank(b.severity) - sevRank(a.severity);
+    if (a.class !== b.class) return a.class.localeCompare(b.class);
+    return a.line - b.line;
+  });
+
+  const sevClass = { critical: 'crit', high: 'high', medium: 'med', low: 'low' };
+
+  let html = `
+    <div style="margin-bottom:24px;">
+      <h1>Attack Surface Report</h1>
+      <div style="color:#666; font-size:13px;">${escapeHtml(m.scanned_path || '')}</div>
+    </div>
+    <div class="meta-grid" style="margin-bottom:16px;">
+      <div>Scan time:</div>        <div>${escapeHtml(m.scan_time || '')}</div>
+      <div>Stack:</div>             <div>Java ${escapeHtml(String(m.java_version || '?'))} · Spring Framework ${escapeHtml(m.spring_framework_version || '?')} · Spring Boot ${escapeHtml(m.spring_boot_version || '?')}</div>
+      <div>Files scanned:</div>    <div>${m.files_scanned || 0}</div>
+      <div>Total findings:</div>   <div><strong>${findings.length}</strong></div>
+    </div>
+    <h2>Summary</h2>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+      <div>
+        <h3 style="margin-top:0;">Severity</h3>
+        <table style="border-collapse:collapse; font-size:13px;">
+          ${SEV_ORDER.map(s => `<tr><td style="padding:2px 8px 2px 0;"><span style="display:inline-block;width:10px;height:10px;background:${({critical:'#dc2626',high:'#ea580c',medium:'#ca8a04',low:'#64748b'})[s]}; margin-right:6px; border-radius:50%;"></span>${s}</td><td>${(m.by_severity || {})[s] || 0}</td></tr>`).join('')}
+        </table>
+      </div>
+      <div>
+        <h3 style="margin-top:0;">Category</h3>
+        <table style="border-collapse:collapse; font-size:13px;">
+          ${Object.keys(m.by_category || {}).sort().map(c => `<tr><td style="padding:2px 8px 2px 0;">${c}</td><td>${m.by_category[c]}</td></tr>`).join('')}
+        </table>
+      </div>
+    </div>
+    <h2>Findings</h2>
+  `;
+
+  for (const f of sorted) {
+    const ann = state.annotations[findingKey(f)];
+    html += `
+      <div class="r-finding ${sevClass[f.severity]}">
+        <div style="display:flex; justify-content:space-between; gap:16px; align-items:baseline;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600;">${escapeHtml(f.entry_point)}</div>
+          <div style="font-size:11px; letter-spacing:1px; text-transform:uppercase; color:${({critical:'#dc2626',high:'#ea580c',medium:'#ca8a04',low:'#64748b'})[f.severity]};"><strong>${f.severity}</strong></div>
+        </div>
+        <div style="font-size:12px; color:#555; margin:2px 0 8px; font-family:'JetBrains Mono',monospace;">
+          ${escapeHtml(f.category)}${f.http_method ? ' · ' + escapeHtml(f.http_method) : ''} · ${escapeHtml(f.package)}.${escapeHtml(f.class)}${f.method ? '#' + escapeHtml(f.method) : ''} · L${f.line}
+        </div>
+        <div style="font-size:13px; margin-bottom:6px;">${escapeHtml(f.description)}</div>
+        ${f.snippet ? `<div class="r-snippet">${escapeHtml(f.snippet)}</div>` : ''}
+        ${f.attack_vectors.length ? `<div style="margin-top:6px;">${f.attack_vectors.map(v => `<span class="r-vector">${escapeHtml(v)}</span>`).join('')}</div>` : ''}
+        ${ann ? renderAnnotationsReport(ann) : ''}
+      </div>
+    `;
+  }
+
+  html += `<div style="color:#999; font-size:11px; margin-top:40px; border-top:1px solid #ddd; padding-top:8px;">
+            Generated by Attack Surface Explorer on ${new Date().toLocaleString()}
+          </div>`;
+  html += `<div class="no-print" style="position:fixed; top:16px; right:16px; display:flex; gap:8px;">
+            <button onclick="window.print()" style="padding:8px 16px; background:#111; color:white; border:none; cursor:pointer; font-size:13px;">Print / Save as PDF</button>
+            <button onclick="closeReport()" style="padding:8px 16px; background:#e5e7eb; color:#111; border:none; cursor:pointer; font-size:13px;">Close</button>
+          </div>`;
+  return html;
+}
+
+function renderAnnotationsReport(ann) {
+  let html = '';
+  if ((ann.notes || []).some(n => n.text)) {
+    html += '<div class="r-anno"><strong>Notes:</strong><ul style="margin:4px 0 0 20px; padding:0;">' +
+      ann.notes.filter(n => n.text).map(n => `<li>${escapeHtml(n.text)}</li>`).join('') + '</ul></div>';
+  }
+  if ((ann.issues || []).some(i => i.title || i.story)) {
+    html += '<div class="r-anno"><strong>Issues / Stories:</strong><ul style="margin:4px 0 0 20px; padding:0;">' +
+      ann.issues.filter(i => i.title || i.story).map(i =>
+        `<li><strong>[${(i.status||'open').toUpperCase()}]</strong> ${escapeHtml(i.title||'(untitled)')}${i.assignee ? ' — '+escapeHtml(i.assignee) : ''}${i.story ? '<br><span style="color:#555;">' + escapeHtml(i.story) + '</span>' : ''}</li>`).join('') + '</ul></div>';
+  }
+  if ((ann.remediations || []).some(r => r.title || r.details)) {
+    html += '<div class="r-anno"><strong>Remediations / Protections:</strong><ul style="margin:4px 0 0 20px; padding:0;">' +
+      ann.remediations.filter(r => r.title || r.details).map(r =>
+        `<li><strong>[${(r.status||'planned').toUpperCase()}]</strong> ${escapeHtml(r.title||'(untitled)')}${r.details ? '<br><span style="color:#555;">' + escapeHtml(r.details) + '</span>' : ''}</li>`).join('') + '</ul></div>';
+  }
+  return html;
+}
+
+function openReport() {
+  const el = document.getElementById('reportView');
+  el.innerHTML = buildReportHTML();
+  el.style.display = 'block';
+}
+function closeReport() {
+  document.getElementById('reportView').style.display = 'none';
+}
+window.closeReport = closeReport;  // expose for inline handler
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+function escXml(s) { return escapeHtml(s); }
+function truncate(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+function shortenPath(p) {
+  if (!p) return '';
+  const base = state.metadata?.scanned_path;
+  if (base && p.startsWith(base)) return '…' + p.slice(base.length);
+  return p;
+}
+function download(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ---------------------------------------------------------------------------
+// Wire up
+// ---------------------------------------------------------------------------
+document.getElementById('fileInput').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const text = await f.text();
+  await importYamlText(text);
+});
+
+const dz = document.getElementById('dropZone');
+if (dz) {
+  ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); e.stopPropagation(); dz.classList.add('dragover');
+  }));
+  ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover');
+  }));
+  dz.addEventListener('drop', async e => {
+    const f = e.dataTransfer.files[0];
+    if (f) { const text = await f.text(); await importYamlText(text); }
+  });
+}
+
+document.getElementById('searchInput').addEventListener('input', e => {
+  state.filters.search = e.target.value;
+  renderDiagram(); renderStats();
+});
+
+document.getElementById('btnExportSvg').addEventListener('click', exportSVG);
+document.getElementById('btnExportMd').addEventListener('click', exportMarkdown);
+document.getElementById('btnExportPdf').addEventListener('click', openReport);
+document.getElementById('btnExportJson').addEventListener('click', exportAnnotationsJSON);
+
+// Deselect when clicking empty diagram area
+document.getElementById('diagramArea').addEventListener('click', () => {
+  if (state.selectedId != null) { state.selectedId = null; renderDiagram(); renderDetail(); }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && state.selectedId != null) {
+    state.selectedId = null; renderDiagram(); renderDetail();
+  }
+  if (e.key === 'Escape') closeReport();
+});
+
+// Initial render
+renderAll();
+</script>
+</body>
+</html>
