@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Sign in — Audit Demo</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body class="auth-body">
+
+<main class="auth-card">
+    <h1>Audit Demo</h1>
+    <p class="muted">Sign in to continue.</p>
+
+    <div th:if="${param.error}"   class="alert alert-error">Invalid username or password.</div>
+    <div th:if="${param.logout}"  class="alert alert-info">You have been logged out.</div>
+
+    <form th:action="@{/login}" method="post">
+        <label>
+            Username
+            <input type="text" name="username" autofocus required>
+        </label>
+        <label>
+            Password
+            <input type="password" name="password" required>
+        </label>
+        <button type="submit" class="primary">Sign in</button>
+    </form>
+
+    <section class="hint">
+        <h3>Demo accounts</h3>
+        <table>
+            <thead><tr><th>Username</th><th>Password</th><th>Roles</th></tr></thead>
+            <tbody>
+                <tr><td>admin</td>    <td>admin123</td>    <td>ADMIN, USER</td></tr>
+                <tr><td>operator</td> <td>operator123</td> <td>OPERATOR, USER</td></tr>
+                <tr><td>viewer</td>   <td>viewer123</td>   <td>USER</td></tr>
+            </tbody>
+        </table>
+    </section>
+</main>
+
+</body>
+</html>

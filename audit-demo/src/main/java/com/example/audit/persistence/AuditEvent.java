@@ -44,6 +44,9 @@ public class AuditEvent {
     @Column(nullable = false, length = 128)
     private String methodName;
 
+    @Column(length = 128)
+    private String principal;
+
     @Column(length = 2000)
     private String detail;
 

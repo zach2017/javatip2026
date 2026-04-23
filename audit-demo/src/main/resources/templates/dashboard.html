@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en"
+      xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard — Audit Demo</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+
+<header class="top">
+    <h1>Audit Demo</h1>
+    <div class="user">
+        Signed in as
+        <strong sec:authentication="name">?</strong>
+        <span class="roles" sec:authentication="principal.authorities">ROLES</span>
+        <form th:action="@{/logout}" method="post" class="inline">
+            <button type="submit" class="link">Sign out</button>
+        </form>
+    </div>
+</header>
+
+<main class="container">
+
+    <!-- ============ Create user form ============ -->
+    <section class="card">
+        <h2>Create user</h2>
+        <p class="muted">Requires role <code>ADMIN</code> or <code>OPERATOR</code>.</p>
+
+        <form id="create-form" th:action="@{/users}" method="post" sec:authorize="hasAnyRole('ADMIN','OPERATOR')">
+            <label>
+                Name
+                <input type="text" name="name" placeholder="Alice" required>
+            </label>
+            <button type="submit" class="primary">Create user</button>
+        </form>
+
+        <p sec:authorize="!hasAnyRole('ADMIN','OPERATOR')" class="muted">
+            Your role cannot create users.
+        </p>
+    </section>
+
+    <!-- ============ Action buttons ============ -->
+    <section class="card">
+        <h2>Trigger audited actions</h2>
+        <p class="muted">Each button posts to a backend endpoint. Results appear below.</p>
+
+        <div class="button-row">
+            <!-- Get user (any role) -->
+            <form th:action="@{/users/1}" method="get" target="result-frame">
+                <input type="hidden" name="_bypass" value="noop">
+                <button type="button" onclick="getUser()">Get user id=1</button>
+            </form>
+
+            <!-- Process (async, ADMIN/OPERATOR) -->
+            <form sec:authorize="hasAnyRole('ADMIN','OPERATOR')"
+                  th:action="@{/users/process}" method="post" target="result-frame">
+                <input type="hidden" name="name"       value="dashboard-user">
+                <input type="hidden" name="durationMs" value="1500">
+                <input type="hidden" name="outcome"    value="SUCCESS">
+                <button type="submit" class="success">Process (SUCCESS, 1.5s)</button>
+            </form>
+
+            <form sec:authorize="hasAnyRole('ADMIN','OPERATOR')"
+                  th:action="@{/users/process}" method="post" target="result-frame">
+                <input type="hidden" name="name"       value="dashboard-user">
+                <input type="hidden" name="durationMs" value="1000">
+                <input type="hidden" name="outcome"    value="FAIL">
+                <button type="submit" class="danger">Process (FAIL, 1s)</button>
+            </form>
+
+            <form sec:authorize="hasAnyRole('ADMIN','OPERATOR')"
+                  th:action="@{/users/process}" method="post" target="result-frame">
+                <input type="hidden" name="name"       value="dashboard-user">
+                <input type="hidden" name="durationMs" value="800">
+                <input type="hidden" name="outcome"    value="FLAKY">
+                <button type="submit" class="warn">Process (FLAKY, 0.8s)</button>
+            </form>
+
+            <form sec:authorize="hasAnyRole('ADMIN','OPERATOR')"
+                  th:action="@{/users/process}" method="post" target="result-frame">
+                <input type="hidden" name="name"       value="dashboard-user">
+                <input type="hidden" name="durationMs" value="500">
+                <input type="hidden" name="outcome"    value="TIMEOUT">
+                <button type="submit" class="warn">Process (TIMEOUT, 0.5s)</button>
+            </form>
+
+            <!-- Force fail (sync, ADMIN/OPERATOR) -->
+            <form sec:authorize="hasAnyRole('ADMIN','OPERATOR')"
+                  th:action="@{/users/fail}" method="post" target="result-frame">
+                <input type="hidden" name="name" value="boom">
+                <button type="submit" class="danger">Force sync fail</button>
+            </form>
+        </div>
+
+        <h3>Response</h3>
+        <iframe name="result-frame" class="result-frame" title="response"></iframe>
+    </section>
+
+    <!-- ============ Recent audit events ============ -->
+    <section class="card">
+        <h2>Recent audit events</h2>
+        <p class="muted" sec:authorize="!hasRole('ADMIN')">
+            Viewing the <code>/audit</code> API requires role <code>ADMIN</code>.
+            As an ADMIN you'd also see fresh rows updated after every action.
+        </p>
+
+        <div sec:authorize="hasRole('ADMIN')">
+            <p class="muted">
+                Showing 20 most recent.
+                <a th:href="@{/audit}">Raw JSON →</a>
+                <a th:href="@{/h2-console}" target="_blank">H2 console →</a>
+                <a th:href="@{/dashboard}" class="refresh">↻ Refresh</a>
+            </p>
+            <table class="events">
+                <thead>
+                <tr>
+                    <th>ID</th><th>When</th><th>User</th><th>Action</th><th>Status</th>
+                    <th>Method</th><th>tookMs</th><th>Detail</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="e : ${recentEvents}"
+                    th:classappend="${e.status.name() == 'FAILURE'} ? 'row-fail' : 'row-ok'">
+                    <td th:text="${e.id}">1</td>
+                    <td th:text="${#temporals.format(e.createdAt, 'HH:mm:ss')}">12:00</td>
+                    <td th:text="${e.principal}">admin</td>
+                    <td th:text="${e.action}">USER_CREATE</td>
+                    <td th:text="${e.status}">SUCCESS</td>
+                    <td th:text="${e.methodName}">create</td>
+                    <td th:text="${e.tookMs}">3</td>
+                    <td class="detail" th:text="${e.detail}">...</td>
+                </tr>
+                <tr th:if="${recentEvents.isEmpty()}">
+                    <td colspan="8" class="muted">No audit events yet. Trigger an action above.</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+</main>
+
+<script>
+  // The Get button is a GET request that we need to send to /users/1 into the iframe.
+  // Using a trivial JS helper so the path is clearly visible.
+  function getUser() {
+      document.querySelector('iframe[name="result-frame"]').src = '/users/1';
+  }
+</script>
+
+</body>
+</html>

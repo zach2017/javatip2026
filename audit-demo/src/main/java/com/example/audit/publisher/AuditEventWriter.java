@@ -10,15 +10,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 
-/**
- * Persists audit events asynchronously.
- *
- * Lives in a separate bean from AuditEventPublisher because Spring's @Async
- * only works through the proxy — self-invocation (one method in a bean calling
- * another @Async method on the same bean) bypasses the proxy and runs
- * synchronously. Putting the @Async method on a distinct bean guarantees the
- * save actually happens on the async executor.
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -32,6 +23,7 @@ public class AuditEventWriter {
             repository.save(AuditEvent.builder()
                     .action(r.action())
                     .status(r.status())
+                    .principal(r.principal())
                     .methodName(r.methodName())
                     .detail(r.detail())
                     .tookMs(r.tookMs())
