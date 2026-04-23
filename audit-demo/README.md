@@ -1,5 +1,11 @@
 # Audit Demo — Spring Boot 3.5 / Java 21
 
+```
+curl -X POST "http://localhost:8080/users?name=Alice"
+curl -X POST "http://localhost:8080/users?name=Bob"
+curl -X POST "http://localhost:8080/users?name=Charlie"
+```
+
 Spring Boot app demonstrating:
 
 - A custom `@Audit` annotation backed by an `AuditAction` interface
