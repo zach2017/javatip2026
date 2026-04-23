@@ -1,12 +1,5 @@
 # Audit Demo — Spring Boot 3.5 / Java 21
 
-curl -X POST "http://localhost:8080/users/process"                                     # 1.5s success
-curl -X POST "http://localhost:8080/users/process?outcome=FAIL&durationMs=800"         # async failure
-curl -X POST "http://localhost:8080/users/process?outcome=FLAKY"                       # coin flip
-curl -X POST "http://localhost:8080/users/fail"                                        # sync failure
-sleep 3
-curl -s "http://localhost:8080/audit?size=20" | python3 -m json.tool
-
 Spring Boot app demonstrating:
 
 - A custom `@Audit` annotation backed by an `AuditAction` interface
